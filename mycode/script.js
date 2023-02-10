@@ -21,9 +21,9 @@ const account1 = {
     '2020-01-28T09:15:04.904Z',
     '2020-04-01T10:17:24.185Z',
     '2020-05-08T14:11:59.604Z',
-    '2020-05-27T17:01:17.194Z',
-    '2020-07-11T23:36:17.929Z',
-    '2020-07-12T10:51:36.790Z',
+    '2023-02-01T17:01:17.194Z',
+    '2023-02-05T23:36:17.929Z',
+    '2023-02-08T10:51:36.790Z',
   ],
   currency: 'EUR',
   locale: 'pt-PT', // de-DE
@@ -81,22 +81,58 @@ const inputClosePin = document.querySelector('.form__input--pin');
 /////////////////////////////////////////////////
 // Functions
 
-const displayMovements = function (movements, sort = false) {
+const formatMovementDate = function (date, locale) {
+  const calcDaysPassed = (date1, date2) =>
+    Math.round(Math.abs(date2 - date1) / (1000 * 60 * 60 * 24));
+
+  const daysPassed = calcDaysPassed(new Date(), date);
+  //console.log(daysPassed);
+
+  if (daysPassed === 0) return `Today`;
+  if (daysPassed === 1) return `Yesterday`;
+  if (daysPassed <= 7) return `${daysPassed} days ago`;
+  else {
+    //looping to erase at the same time
+    //const day = `${date.getDate()}`.padStart(2, 0);
+    //length of 2, if date/month only one number pad with 0 at start
+    //const month = `${date.getMonth() + 1}`.padStart(2, 0);
+    //const year = date.getFullYear();
+    //return `${day}/${month}/${year}`;
+
+    //use Internationalizing
+    return new Intl.DateTimeFormat(locale).format(date); //date from function input
+  }
+};
+
+const displayMovements = function (acc, sort = false) {
   containerMovements.innerHTML = '';
 
-  const movs = sort ? movements.slice().sort((a, b) => a - b) : movements;
+  const movs = sort
+    ? acc.movements.slice().sort((a, b) => a - b)
+    : acc.movements;
 
   movs.forEach(function (mov, i) {
     const type = mov > 0 ? 'deposit' : 'withdrawal';
+
+    //current index in the movements array
+    //points to equivalent date in this movements date array
+    const date = new Date(acc.movementsDates[i]);
+    const displayDate = formatMovementDate(date, acc.locale);
+
+    const formattedMov = new Intl.NumberFormat(acc.locale, {
+      style: 'currency',
+      currency: acc.currency, //get currency from current account
+    }).format(mov);
 
     const html = `
       <div class="movements__row">
         <div class="movements__type movements__type--${type}">${
       i + 1
     } ${type}</div>
-        <div class="movements__value">${mov.toFixed(2)}€</div>
+      <div class="movements__date">${displayDate}</div>
+      <div class="movements__value">${formattedMov}</div>
       </div>
-    `;
+    `; //${formattedMov} done mannually was ${mov.toFixed(2)}€
 
     containerMovements.insertAdjacentHTML('afterbegin', html);
   });
@@ -142,7 +178,7 @@ createUsernames(accounts);
 
 const updateUI = function (acc) {
   // Display movements
-  displayMovements(acc.movements);
+  displayMovements(acc);
 
   // Display balance
   calcDisplayBalance(acc);
@@ -154,6 +190,33 @@ const updateUI = function (acc) {
 ///////////////////////////////////////
 // Event handlers
 let currentAccount;
+
+//FAKE ALWAYS LOGGED IN
+currentAccount = account1;
+updateUI(currentAccount);
+containerApp.style.opacity = 100;
+
+//Experimenting with API
+//const now = new Date();
+//create object for options (pass into datetimeformat)
+//const options = {
+//  hour: 'numeric',
+//  minute: 'numeric',
+//  day: 'numeric',
+//  month: 'long', //can be numeric, 2-digit, or long
+//  year: 'numeric',
+//  weekday: 'long', //can be long, short, narrow
+//};
+//get locale from person's browser rather than manually entered
+//const locale = navigator.language;
+//console.log(locale);
+//pass in locale string (language-country)
+//labelDate.textContent = new Intl.DateTimeFormat('en-US', options).format(now);
+//labelDate.textContent = new Intl.DateTimeFormat(locale, options).format(now);
+//creates formatter for this language-country
+//then call format on date (in this case now)
+//google iso language code table (lingoes.net)
+//MDN Intl documentation
 
 btnLogin.addEventListener('click', function (e) {
   // Prevent form from submitting
@@ -170,6 +233,33 @@ btnLogin.addEventListener('click', function (e) {
       currentAccount.owner.split(' ')[0]
     }`;
     containerApp.style.opacity = 100;
+
+    const now = new Date();
+    const options = {
+      hour: 'numeric',
+      minute: 'numeric',
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+      //weekday: 'long',
+    };
+    //const locale = navigator.language;//locale from browser
+    //use locale from current account
+    labelDate.textContent = new Intl.DateTimeFormat(
+      currentAccount.locale,
+      options
+    ).format(now);
+
+    //day/month/year
+    //Create current date and time
+    //const now = new Date();
+    //const day = `${now.getDate()}`.padStart(2, 0);
+    //length of 2, if date/month only one number pad with 0 at start
+    //const month = `${now.getMonth() + 1}`.padStart(2, 0);
+    //const year = now.getFullYear();
+    //const hour = `${now.getHours()}`.padStart(2, 0);
+    //const min = `${now.getMinutes()}`.padStart(2, 0);
+    //labelDate.textContent = `${day}/${month}/${year}, ${hour}:${min}`;
 
     // Clear input fields
     inputLoginUsername.value = inputLoginPin.value = '';
@@ -198,6 +288,10 @@ btnTransfer.addEventListener('click', function (e) {
     currentAccount.movements.push(-amount);
     receiverAcc.movements.push(amount);
 
+    //Add transfer date
+    currentAccount.movementsDates.push(new Date().toISOString());
+    receiverAcc.movementsDates.push(new Date().toISOString());
+
     // Update UI
     updateUI(currentAccount);
   }
@@ -211,6 +305,9 @@ btnLoan.addEventListener('click', function (e) {
   if (amount > 0 && currentAccount.movements.some(mov => mov >= amount * 0.1)) {
     // Add movement
     currentAccount.movements.push(amount);
+
+    //Add loan date
+    currentAccount.movementsDates.push(new Date().toISOString());
 
     // Update UI
     updateUI(currentAccount);
@@ -241,6 +338,10 @@ btnClose.addEventListener('click', function (e) {
   inputCloseUsername.value = inputClosePin.value = '';
 });
 
+//error here with sort button
+//has to do with changes made to displayMovements (before changes minute 8:14)
+//HINT: video 176 minute 9:14
+//look at original github code
 let sorted = false;
 btnSort.addEventListener('click', function (e) {
   e.preventDefault();
@@ -413,10 +514,10 @@ console.log(PI);
 console.log(Number('230000')); //230000
 console.log(Number('230_000')); //NaN (can cause bugs)
 console.log(parseInt('230_000')); //230 (can cause bugs)
-*/
+
 
 //////////////////////////////////////////////////////////////////////
-//WORKING WITH BIGINT
+//WORKING WITH BIGINT (can be used to store numbers no matter how big)
 //numbers internally = 64bits
 //there are exactly 64 1's or 0's to represent any given number
 //only 53 for digits themselves
@@ -429,3 +530,156 @@ console.log(2 ** 53 + 1); //can't get any bigger than this
 console.log(2 ** 53 + 2);
 console.log(2 ** 53 + 3);
 console.log(2 ** 53 + 4);
+
+//BIGINT
+console.log(48387586238659163918659678976329586n); //n makes it a bigint
+console.log(BigInt(483875)); //only use with smaller numbers for accuracy
+
+//OPERATIONS
+console.log(10000n + 10000n);
+console.log(4875092834760982746987n * 10000000n);
+
+//can not mix BigInt with regular numbers
+const huge = 20294857928457n;
+const num = 23;
+//console.log(huge * num); //error: cannot mix bigint and other types
+console.log(huge * BigInt(num));
+
+//**Exceptions**
+//coercion
+console.log(20n > 15); //true
+console.log(20n === 20); //false, BigInt vs number
+console.log(20n == 20); //true, type coercion
+console.log(20n == '20'); //true, type coercion
+//comparison and plus operators when working with strings
+console.log(huge + ' is REALLY big!!!');
+
+//Divisions
+console.log(10n / 3n);
+console.log(10 / 3);
+console.log(11n / 3n);
+console.log(11 / 3);
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//CREATING DATES
+const now = new Date();
+console.log(now);
+
+//parse date from date string
+console.log(new Date('Feb 09 2023 18:48:45'));
+console.log(new Date('December 24, 2015'));
+//not used alot because not reliable
+console.log(new Date(account1.movementsDates[0]));
+//good to use it this way because JS created the string
+
+//month is JS is 0 based
+console.log(new Date(2037, 10, 19, 15, 23, 5)); //Thu Nov 19 2037 15:23:05
+//JS auto corrects the date
+console.log(new Date(2037, 10, 31)); //auto corrects to the next day of the next month
+console.log(new Date(2037, 10, 33)); //auto corrects to Dec 03
+
+//pass into the date consturctor function:
+//the amount of milliseconds passed since the beginning of the Unix time (Dec 31 1969)
+console.log(new Date(0)); //Wed Dec 31 1969
+console.log(new Date(3 * 24 * 60 * 60 * 1000)); //Sat Jan 03, 1970
+//3 days 24hours 60min in one hour 60sec in one min 1000 to convert to milliseconds
+//time stamp (259200000) of the date
+
+
+//Working with dates
+//methods to get components of a date
+const future = new Date(2037, 10, 19, 15, 23);
+console.log(future);
+console.log(future.getFullYear()); //2037
+console.log(future.getMonth()); //0 based, 10 (November)
+console.log(future.getDate()); //19
+console.log(future.getDay()); //4, day of the week is 0 based starting with Sunday
+//time is a 24hour clock (military time)
+console.log(future.getHours()); //15
+console.log(future.getMinutes()); //23
+console.log(future.getSeconds()); //0
+console.log(future.toISOString()); //international standard for date/time
+
+console.log(future.getTime()); //time stamp of the date
+console.log(new Date(2142282180000));
+
+//current time stamp for this moment
+console.log(Date.now());
+
+//methods to set components of a date
+future.setFullYear(2040);
+console.log(future);
+future.setMonth(12);
+console.log(future);
+future.setDate(12); //will automatically change the day of the week
+console.log(future);
+future.setHours(6);
+console.log(future);
+future.setMinutes(50);
+console.log(future);
+future.setSeconds(3);
+console.log(future);
+
+
+/////////////////////////////////////////////////////////////////
+//OPERATIONS WITH DATES
+
+//use time stamp (milliseconds) to perform calculations with dates
+const future = new Date(2037, 10, 19, 15, 23);
+console.log(+future); //convert to a number (time stamp)
+
+//create function that takes in two dates and returns the number of days between the two
+const calcDaysPassed = (date1, date2) =>
+  Math.abs(date2 - date1) / (1000 * 60 * 60 * 24); //milliseconds to min to hours to days
+
+const days1 = calcDaysPassed(new Date(2037, 3, 14), new Date(2037, 3, 24));
+console.log(days1);
+
+const days2 = calcDaysPassed(new Date(2037, 3, 14), new Date(2037, 3, 4));
+console.log(days1); //math.abs gives us the positive
+
+const days3 = calcDaysPassed(
+  new Date(2037, 3, 14),
+  new Date(2037, 3, 4, 10, 8) //gets rid of extra data (if not use math.round in function)
+);
+console.log(days1);
+*/
+
+///////////////////////////////////////////////////////////////////////
+//INTERNATIONALZIING DATES (INTL)
+//formating dates and times
+//(done in Bankist App in formatMovementDate & btnLogin.addEventListener)
+
+/////////////////////////////////////////////////////////////////////
+//INTERNATIONALZIING NUMBERS (INTL)
+
+const num = 3884764.23;
+
+//const options = {
+//  style: 'unit',
+//  unit: 'celsius', //miles-per-hour, celsius, etc.
+//};
+//const options = {
+//  style: 'percent',
+//  unit: 'celsius', //this is then ignored
+//};
+const options = {
+  style: 'currency',
+  unit: 'celsius', //this is then ignored
+  currency: 'EUR', //have to set the currency (not defined by the locale)
+  //turn off/on grouping
+  //useGrouping: false, //gets rid of separators
+};
+
+//numberformat takes in locale string
+//pass into format what you want to format (num in this case)
+console.log('US: ', new Intl.NumberFormat('en-US', options).format(num));
+console.log('Germany: ', new Intl.NumberFormat('de-DE', options).format(num));
+console.log('Syria: ', new Intl.NumberFormat('ar-SY', options).format(num));
+console.log(
+  navigator.language,
+  new Intl.NumberFormat(navigator.language, options).format(num)
+); //Browser locale
+
+//implement currencies in bankist app
