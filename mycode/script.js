@@ -104,6 +104,15 @@ const formatMovementDate = function (date, locale) {
   }
 };
 
+//new functions for formatting currencies
+//(make reusable outside this app by passing in all needed data)
+const formatCur = function (value, locale, currency) {
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: currency, //get currency from current account
+  }).format(value);
+};
+
 const displayMovements = function (acc, sort = false) {
   containerMovements.innerHTML = '';
 
@@ -119,10 +128,12 @@ const displayMovements = function (acc, sort = false) {
     const date = new Date(acc.movementsDates[i]);
     const displayDate = formatMovementDate(date, acc.locale);
 
-    const formattedMov = new Intl.NumberFormat(acc.locale, {
-      style: 'currency',
-      currency: acc.currency, //get currency from current account
-    }).format(mov);
+    const formattedMov = formatCur(mov, acc.locale, acc.currency);
+    //before:
+    //new Intl.NumberFormat(acc.locale, {
+    //  style: 'currency',
+    //  currency: acc.currency, //get currency from current account
+    //}).format(mov);
 
     const html = `
       <div class="movements__row">
@@ -140,19 +151,22 @@ const displayMovements = function (acc, sort = false) {
 
 const calcDisplayBalance = function (acc) {
   acc.balance = acc.movements.reduce((acc, mov) => acc + mov, 0);
-  labelBalance.textContent = `${acc.balance.toFixed(2)}€`;
+  //labelBalance.textContent = `${acc.balance.toFixed(2)}€`; //before
+  labelBalance.textContent = formatCur(acc.balance, acc.locale, acc.currency);
 };
 
 const calcDisplaySummary = function (acc) {
   const incomes = acc.movements
     .filter(mov => mov > 0)
     .reduce((acc, mov) => acc + mov, 0);
-  labelSumIn.textContent = `${incomes.toFixed(2)}€`;
+  //labelSumIn.textContent = `${incomes.toFixed(2)}€`; //before
+  labelSumIn.textContent = formatCur(incomes, acc.locale, acc.currency);
 
   const out = acc.movements
     .filter(mov => mov < 0)
     .reduce((acc, mov) => acc + mov, 0);
-  labelSumOut.textContent = `${Math.abs(out).toFixed(2)}€`;
+  //labelSumOut.textContent = `${Math.abs(out).toFixed(2)}€`; //before
+  labelSumOut.textContent = formatCur(Math.abs(out), acc.locale, acc.currency);
 
   const interest = acc.movements
     .filter(mov => mov > 0)
@@ -162,7 +176,8 @@ const calcDisplaySummary = function (acc) {
       return int >= 1;
     })
     .reduce((acc, int) => acc + int, 0);
-  labelSumInterest.textContent = `${interest.toFixed(2)}€`;
+  //labelSumInterest.textContent = `${interest.toFixed(2)}€`;
+  labelSumInterest.textContent = formatCur(interest, acc.locale, acc.currency);
 };
 
 const createUsernames = function (accs) {
@@ -187,14 +202,45 @@ const updateUI = function (acc) {
   calcDisplaySummary(acc);
 };
 
+//function for logout timer
+const startLogOutTimer = function () {
+  const tick = function () {
+    //get minutes and seconds
+    const min = String(Math.trunc(time / 60)).padStart(2, 0);
+    //convert to string to use padStart (lenght of 2, pad with 0)
+    const sec = String(time % 60).padStart(2, 0); //40 is remainder
+
+    //in each callback call, print the remaining time to UI
+    labelTimer.textContent = `${min}:${sec}`;
+
+    //when 0 seconds, stop timer and log out user
+    if (time === 0) {
+      clearInterval(timer);
+      labelWelcome.textContent = 'Log in to get started';
+      containerApp.style.opacity = 0;
+    }
+
+    //Decrease by 1second
+    time--;
+  };
+
+  //set time to 5 minutes
+  let time = 300;
+
+  tick(); //call function imediately
+  const timer = setInterval(tick, 1000); //then every second thereafter
+
+  return timer; //inorder to clear the timer if another timer is already running
+};
+
 ///////////////////////////////////////
 // Event handlers
-let currentAccount;
+let currentAccount, timer; //global variables
 
 //FAKE ALWAYS LOGGED IN
-currentAccount = account1;
-updateUI(currentAccount);
-containerApp.style.opacity = 100;
+//currentAccount = account1;
+//updateUI(currentAccount);
+//containerApp.style.opacity = 100;
 
 //Experimenting with API
 //const now = new Date();
@@ -265,6 +311,10 @@ btnLogin.addEventListener('click', function (e) {
     inputLoginUsername.value = inputLoginPin.value = '';
     inputLoginPin.blur();
 
+    //Timer
+    if (timer) clearInterval(timer);
+    timer = startLogOutTimer();
+
     // Update UI
     updateUI(currentAccount);
   }
@@ -294,6 +344,10 @@ btnTransfer.addEventListener('click', function (e) {
 
     // Update UI
     updateUI(currentAccount);
+
+    //Reset the timer
+    clearInterval(timer);
+    timer = startLogOutTimer();
   }
 });
 
@@ -303,14 +357,20 @@ btnLoan.addEventListener('click', function (e) {
   const amount = Math.floor(inputLoanAmount.value);
 
   if (amount > 0 && currentAccount.movements.some(mov => mov >= amount * 0.1)) {
-    // Add movement
-    currentAccount.movements.push(amount);
+    setTimeout(function () {
+      // Add movement
+      currentAccount.movements.push(amount);
 
-    //Add loan date
-    currentAccount.movementsDates.push(new Date().toISOString());
+      //Add loan date
+      currentAccount.movementsDates.push(new Date().toISOString());
 
-    // Update UI
-    updateUI(currentAccount);
+      // Update UI
+      updateUI(currentAccount);
+
+      //Reset the timer
+      clearInterval(timer);
+      timer = startLogOutTimer();
+    }, 2500);
   }
   inputLoanAmount.value = '';
 });
@@ -644,7 +704,7 @@ const days3 = calcDaysPassed(
   new Date(2037, 3, 4, 10, 8) //gets rid of extra data (if not use math.round in function)
 );
 console.log(days1);
-*/
+
 
 ///////////////////////////////////////////////////////////////////////
 //INTERNATIONALZIING DATES (INTL)
@@ -683,3 +743,51 @@ console.log(
 ); //Browser locale
 
 //implement currencies in bankist app
+
+
+//////////////////////////////////////////////////////////////
+//TIMERS: SET TIME OUT & SET INTERVAL
+//setTimeout: runs just once, after a defined time
+//setInterval: runs basically forever until we stop it
+
+//order a pizza
+//recieves a callback function & a specified milliseconds
+setTimeout(() => console.log('Here is your pizza'), 3000);
+//3seconds(schedule the callback functions call)
+console.log('Waiting...');
+//mechanism called Asynchronous JavaScript
+
+//all arguments passed in after the delay will be arguments to the function
+setTimeout(
+  (ing1, ing2) => console.log(`Here is your pizza with ${ing1} & ${ing2}.`),
+  3000,
+  'olives',
+  'spinach'
+);
+
+//put ingredients in an array
+const ingredients = ['olives', 'spinach'];
+
+const pizzaTimer = setTimeout(
+  (ing1, ing2) => console.log(`Here is your pizza with ${ing1} & ${ing2}.`),
+  3000,
+  ...ingredients //use spread operator
+);
+//before the delay has passed we can cancel the timeout
+if (ingredients.includes('spinach')) clearTimeout(pizzaTimer);
+
+//work on loan approval timeout in bankist app
+
+//setInterval
+//after each second display new date/time
+setInterval(function () {
+  const now = new Date();
+  console.log(now);
+}, 1000);
+
+//CHALLENGE TO BUILD CLOCK...
+//external file: js-clock
+*/
+
+///////////////////////////////////////////////////////////////
+//IMPLEMENTING A COUNTDOWN TIMER in Bankist app
